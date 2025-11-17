@@ -36,13 +36,6 @@ def _perform_clock_out(driver, wait):
         driver.execute_script("arguments[0].click();", clock_out_btn_2)
         print("Second clock-out button clicked.")
 
-        try:
-            clock_out_btn_2 = wait.until(EC.presence_of_element_located(CLOCK_OUT_BUTTON_2))
-            driver.execute_script("arguments[0].click();", clock_out_btn_2)
-            print("Second clock-out button clicked again for confirmation.")
-        except Exception:
-            print("No confirmation needed for clock-out or button not found.")
-
     finally:
         driver.implicitly_wait(5)
 
