@@ -204,9 +204,20 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-setuid-sandbox")
 
+    # Additional stability options for cloud environments
+    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+    chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--disable-web-security")
+    chrome_options.add_argument("--single-process")  # Run in single process mode for stability
+    chrome_options.add_argument("--no-zygote")  # Disable zygote process
+
     if use_headless:
-        chrome_options.add_argument("--headless=new")
+        # Use older headless mode for better compatibility in cloud environments
+        chrome_options.add_argument("--headless")
         chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--remote-debugging-port=9222")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     else:
         chrome_options.add_argument("--start-maximized")
 
@@ -241,13 +252,21 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
 def login(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
     # Set custom geolocation to user's location
     # Latitude: 23.034049, Longitude: 72.504524, Accuracy: 100
-    driver.execute_cdp_cmd("Emulation.setGeolocationOverride", {
-        "latitude": 23.034049,
-        "longitude": 72.504524,
-        "accuracy": 100
-    })
+    try:
+        driver.execute_cdp_cmd("Emulation.setGeolocationOverride", {
+            "latitude": 23.034049,
+            "longitude": 72.504524,
+            "accuracy": 100
+        })
+        print("Geolocation set successfully.")
+    except Exception as e:
+        print(f"Warning: Could not set geolocation via CDP: {e}")
 
+    print(f"Navigating to login page: {URL}")
     driver.get(URL)
+
+    # Wait for page to load
+    time.sleep(2)
 
     username_input = wait.until(EC.presence_of_element_located(USERNAME_INPUT))
     username_input.clear()
@@ -268,13 +287,49 @@ def login(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
 
 def go_to_attendance(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
     try:
-        time.sleep(1)
+        # Wait for page to stabilize after login
+        time.sleep(2)
+
+        # Ensure we're on the main content frame
+        driver.switch_to.default_content()
+
+        # Wait for the attendance button to be present and clickable
+        print("Looking for attendance button...")
+        attendance_btn = wait.until(EC.presence_of_element_located(ATTENDANCE_BUTTON))
+
+        # Scroll button into view if needed
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", attendance_btn)
+        time.sleep(0.5)
+
+        # Wait for it to be clickable
         attendance_btn = wait.until(EC.element_to_be_clickable(ATTENDANCE_BUTTON))
-        attendance_btn.click()
+
+        # Try JavaScript click first (more reliable in headless mode)
+        try:
+            driver.execute_script("arguments[0].click();", attendance_btn)
+            print("Clicked attendance button using JavaScript.")
+        except Exception:
+            # Fallback to regular click
+            attendance_btn.click()
+            print("Clicked attendance button using regular click.")
+
         print("Navigated to attendance page.")
         time.sleep(1)
+    except TimeoutException as exc:
+        print(f"Timeout waiting for attendance button: {exc}")
+        print(f"Current URL: {driver.current_url}")
+        try:
+            print(f"Page title: {driver.title}")
+        except Exception:
+            pass
+        raise
     except Exception as exc:
         print(f"Error navigating to attendance page: {exc}")
+        print(f"Current URL: {driver.current_url}")
+        try:
+            print(f"Page title: {driver.title}")
+        except Exception:
+            pass
         raise
 
 
