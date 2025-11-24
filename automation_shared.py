@@ -196,29 +196,14 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option("useAutomationExtension", False)
 
-    # Additional arguments for cloud environments (Render, Heroku, etc.)
+    # Minimal essential arguments for cloud environments
+    # Using only the bare minimum to avoid conflicts and crashes
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--disable-software-rasterizer")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-setuid-sandbox")
-
-    # Additional stability options for cloud environments
-    # Consolidate disable-features to avoid conflicts
-    chrome_options.add_argument("--disable-features=VizDisplayCompositor,IsolateOrigins,site-per-process")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("--disable-web-security")
-    chrome_options.add_argument("--disable-crash-reporter")  # Disable crash reporter overhead
-    chrome_options.add_argument("--disable-logging")  # Reduce I/O overhead
-    chrome_options.add_argument("--log-level=3")  # Only show fatal errors
-    # NOTE: Removed --single-process and --no-zygote as they cause crashes in cloud environments
 
     if use_headless:
-        # Use older headless mode for better compatibility in cloud environments
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--remote-debugging-port=9222")
     else:
         chrome_options.add_argument("--start-maximized")
 
@@ -267,14 +252,7 @@ def login(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
     driver.get(URL)
 
     # Wait for page to load completely
-    time.sleep(2)
-
-    # Wait for document ready state
-    try:
-        wait.until(lambda d: d.execute_script("return document.readyState") == "complete")
-        print("Login page fully loaded.")
-    except Exception:
-        print("Warning: Could not verify page load state.")
+    time.sleep(3)
 
     username_input = wait.until(EC.presence_of_element_located(USERNAME_INPUT))
     username_input.clear()
@@ -299,26 +277,28 @@ def go_to_attendance(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
         print("Waiting for page to load after login...")
         time.sleep(3)
 
-        # Wait for document ready state
-        try:
-            wait.until(lambda d: d.execute_script("return document.readyState") == "complete")
-            print("Page fully loaded after login.")
-        except Exception:
-            print("Warning: Could not verify page load state after login.")
+        # Try direct navigation to attendance page first to avoid click-related crashes
+        current_url = driver.current_url
+        print(f"Current URL after login: {current_url}")
 
-        # Ensure we're on the main content frame
+        # Extract base URL and construct attendance URL
+        if "msowinv.spinehrm.in" in current_url or "spinehrm" in current_url:
+            base_url = current_url.split("/")[0] + "//" + current_url.split("/")[2]
+            attendance_url = base_url + "/Atten/EmpReqHome.aspx"
+            print(f"Navigating directly to attendance page: {attendance_url}")
+            driver.get(attendance_url)
+            print("Navigated to attendance page via direct URL.")
+            time.sleep(2)
+            return
+
+        # Fallback: Try clicking the attendance button
+        print("Attempting to find and click attendance button...")
         driver.switch_to.default_content()
 
-        # Wait for the attendance button to be present and clickable
-        print("Looking for attendance button...")
         attendance_btn = wait.until(EC.presence_of_element_located(ATTENDANCE_BUTTON))
         print("Attendance button found.")
 
-        # Wait for it to be clickable
         attendance_btn = wait.until(EC.element_to_be_clickable(ATTENDANCE_BUTTON))
-        print("Attendance button is clickable.")
-
-        # Use regular click (more stable, avoid JavaScript execution that can crash Chrome)
         attendance_btn.click()
         print("Clicked attendance button.")
 
