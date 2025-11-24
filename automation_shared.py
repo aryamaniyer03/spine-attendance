@@ -170,6 +170,10 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
 
     chrome_options = webdriver.ChromeOptions()
 
+    # Set page load strategy to 'none' to prevent Chrome from waiting for full page loads
+    # This reduces the chance of crashes during navigation
+    chrome_options.page_load_strategy = 'none'
+
     # Fake camera and media permissions
     chrome_options.add_argument("--use-fake-ui-for-media-stream")
     chrome_options.add_argument("--use-fake-device-for-media-stream")
@@ -249,10 +253,15 @@ def login(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
         print(f"Warning: Could not set geolocation via CDP: {e}")
 
     print(f"Navigating to login page: {URL}")
-    driver.get(URL)
+    try:
+        driver.get(URL)
+        print("Login page navigation initiated.")
+    except Exception as e:
+        print(f"Error during navigation to login page: {e}")
+        raise
 
-    # Wait for page to load completely
-    time.sleep(3)
+    # Wait for page to load (using 'none' strategy, so we need explicit wait)
+    time.sleep(5)
 
     username_input = wait.until(EC.presence_of_element_located(USERNAME_INPUT))
     username_input.clear()
@@ -275,21 +284,29 @@ def go_to_attendance(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
     try:
         # Wait for page to stabilize after login
         print("Waiting for page to load after login...")
-        time.sleep(3)
+        time.sleep(5)  # Increased wait time for stability
 
         # Try direct navigation to attendance page first to avoid click-related crashes
-        current_url = driver.current_url
-        print(f"Current URL after login: {current_url}")
+        try:
+            current_url = driver.current_url
+            print(f"Current URL after login: {current_url}")
+        except Exception as e:
+            print(f"Warning: Could not get current URL: {e}")
+            current_url = ""
 
         # Extract base URL and construct attendance URL
         if "msowinv.spinehrm.in" in current_url or "spinehrm" in current_url:
             base_url = current_url.split("/")[0] + "//" + current_url.split("/")[2]
             attendance_url = base_url + "/Atten/EmpReqHome.aspx"
             print(f"Navigating directly to attendance page: {attendance_url}")
-            driver.get(attendance_url)
-            print("Navigated to attendance page via direct URL.")
-            time.sleep(2)
-            return
+            try:
+                driver.get(attendance_url)
+                print("Navigated to attendance page via direct URL.")
+                time.sleep(3)  # Wait for page to start loading with 'none' strategy
+                return
+            except Exception as nav_error:
+                print(f"Error during direct navigation: {nav_error}")
+                print("Falling back to button click method...")
 
         # Fallback: Try clicking the attendance button
         print("Attempting to find and click attendance button...")
