@@ -205,19 +205,20 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
     chrome_options.add_argument("--disable-setuid-sandbox")
 
     # Additional stability options for cloud environments
-    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
-    chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+    # Consolidate disable-features to avoid conflicts
+    chrome_options.add_argument("--disable-features=VizDisplayCompositor,IsolateOrigins,site-per-process")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--disable-web-security")
-    chrome_options.add_argument("--single-process")  # Run in single process mode for stability
-    chrome_options.add_argument("--no-zygote")  # Disable zygote process
+    chrome_options.add_argument("--disable-crash-reporter")  # Disable crash reporter overhead
+    chrome_options.add_argument("--disable-logging")  # Reduce I/O overhead
+    chrome_options.add_argument("--log-level=3")  # Only show fatal errors
+    # NOTE: Removed --single-process and --no-zygote as they cause crashes in cloud environments
 
     if use_headless:
         # Use older headless mode for better compatibility in cloud environments
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--remote-debugging-port=9222")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     else:
         chrome_options.add_argument("--start-maximized")
 
@@ -265,8 +266,15 @@ def login(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
     print(f"Navigating to login page: {URL}")
     driver.get(URL)
 
-    # Wait for page to load
+    # Wait for page to load completely
     time.sleep(2)
+
+    # Wait for document ready state
+    try:
+        wait.until(lambda d: d.execute_script("return document.readyState") == "complete")
+        print("Login page fully loaded.")
+    except Exception:
+        print("Warning: Could not verify page load state.")
 
     username_input = wait.until(EC.presence_of_element_located(USERNAME_INPUT))
     username_input.clear()
@@ -288,7 +296,15 @@ def login(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
 def go_to_attendance(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
     try:
         # Wait for page to stabilize after login
-        time.sleep(2)
+        print("Waiting for page to load after login...")
+        time.sleep(3)
+
+        # Wait for document ready state
+        try:
+            wait.until(lambda d: d.execute_script("return document.readyState") == "complete")
+            print("Page fully loaded after login.")
+        except Exception:
+            print("Warning: Could not verify page load state after login.")
 
         # Ensure we're on the main content frame
         driver.switch_to.default_content()
@@ -296,25 +312,18 @@ def go_to_attendance(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
         # Wait for the attendance button to be present and clickable
         print("Looking for attendance button...")
         attendance_btn = wait.until(EC.presence_of_element_located(ATTENDANCE_BUTTON))
-
-        # Scroll button into view if needed
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", attendance_btn)
-        time.sleep(0.5)
+        print("Attendance button found.")
 
         # Wait for it to be clickable
         attendance_btn = wait.until(EC.element_to_be_clickable(ATTENDANCE_BUTTON))
+        print("Attendance button is clickable.")
 
-        # Try JavaScript click first (more reliable in headless mode)
-        try:
-            driver.execute_script("arguments[0].click();", attendance_btn)
-            print("Clicked attendance button using JavaScript.")
-        except Exception:
-            # Fallback to regular click
-            attendance_btn.click()
-            print("Clicked attendance button using regular click.")
+        # Use regular click (more stable, avoid JavaScript execution that can crash Chrome)
+        attendance_btn.click()
+        print("Clicked attendance button.")
 
         print("Navigated to attendance page.")
-        time.sleep(1)
+        time.sleep(2)
     except TimeoutException as exc:
         print(f"Timeout waiting for attendance button: {exc}")
         print(f"Current URL: {driver.current_url}")
