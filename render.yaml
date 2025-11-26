@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: spine-attendance
+    runtime: docker
+    plan: free
+    region: singapore
+    envVars:
+      - key: SPINE_URL
+        value: https://msowinv.spinehrm.in/login.aspx?ReturnUrl=%2fhomepage.aspx
+      - key: SPINE_USERNAME
+        value: SIE014
+      - key: SPINE_PASSWORD
+        value: "@Yer2oo3"
+      - key: CHROMEDRIVER_PATH
+        value: /usr/local/bin/chromedriver
+      - key: PORT
+        value: 10000
+    healthCheckPath: /health
