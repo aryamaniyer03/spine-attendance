@@ -12,6 +12,51 @@ app = Flask(__name__)
 
 SCREENSHOTS_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
+
+def _format_notification(action, result):
+    """Format a clean notification message for iOS Shortcuts.
+
+    Returns (notification_title, notification_body, success).
+    """
+    success = result.get('success', False)
+    message = result.get('message', 'Unknown error')
+
+    if success:
+        # e.g. "Clock-in verified - page shows: Clocked In at 3:35 PM, Today"
+        # Extract just the time part for a clean notification
+        if "at " in message:
+            time_part = message.split("at ", 1)[1].rstrip(".")
+            return f"✅ {action} Success", f"{action} at {time_part}", True
+        return f"✅ {action} Success", message, True
+
+    # Error cases - provide clear, actionable messages
+    if "button failed" in message.lower():
+        return f"❌ {action} Failed", f"Could not find the {action} button on the page. The HR portal layout may have changed.", False
+
+    if "could not verify" in message.lower() or "check screenshots" in message.lower():
+        return f"⚠️ {action} Unverified", f"Buttons were clicked but could not confirm it worked. Check /screenshots to see what happened.", False
+
+    if "page shows" in message.lower() and not success:
+        # Error indicator found on page
+        error_detail = message.split("page shows: ", 1)[-1] if "page shows: " in message else message
+        return f"❌ {action} Failed", f"HR portal error: {error_detail}", False
+
+    if "login" in message.lower():
+        return f"❌ {action} Failed", f"Could not log in to Spine HR. Password may have changed.", False
+
+    if "attendance" in message.lower():
+        return f"❌ {action} Failed", f"Logged in but could not find the attendance page.", False
+
+    if "chrome" in message.lower() or "browser" in message.lower() or "driver" in message.lower():
+        return f"❌ {action} Failed", f"Browser error: {message}", False
+
+    if "timeout" in message.lower():
+        return f"❌ {action} Failed", f"Page took too long to respond. Spine HR may be down.", False
+
+    # Generic fallback
+    return f"❌ {action} Failed", message, False
+
+
 # Health check endpoint
 @app.route('/')
 def home():
@@ -37,17 +82,25 @@ def trigger_clock_in():
     """Trigger clock-in automation"""
     try:
         result = clock_in(headless=True)
-        status_code = 200 if result.get('success', False) else 422
+        title, body, success = _format_notification("Clock-In", result)
+        status_code = 200 if success else 422
         return jsonify({
-            'success': result.get('success', False),
-            'message': result.get('message', 'Unknown error'),
+            'success': success,
+            'title': title,
+            'body': body,
+            'notification': f"{title}\n{body}",
+            'detail': result.get('message', ''),
             'screenshot': result.get('screenshot'),
             'timestamp': datetime.now().isoformat()
         }), status_code
     except Exception as e:
+        error_msg = str(e).split('\n')[0][:200]  # First line, max 200 chars
         return jsonify({
             'success': False,
-            'message': f'Error during clock-in: {str(e)}',
+            'title': '❌ Clock-In Failed',
+            'body': f'Unexpected error: {error_msg}',
+            'notification': f'❌ Clock-In Failed\nUnexpected error: {error_msg}',
+            'detail': str(e),
             'timestamp': datetime.now().isoformat()
         }), 500
 
@@ -56,17 +109,25 @@ def trigger_clock_out():
     """Trigger clock-out automation"""
     try:
         result = clock_out(headless=True)
-        status_code = 200 if result.get('success', False) else 422
+        title, body, success = _format_notification("Clock-Out", result)
+        status_code = 200 if success else 422
         return jsonify({
-            'success': result.get('success', False),
-            'message': result.get('message', 'Unknown error'),
+            'success': success,
+            'title': title,
+            'body': body,
+            'notification': f"{title}\n{body}",
+            'detail': result.get('message', ''),
             'screenshot': result.get('screenshot'),
             'timestamp': datetime.now().isoformat()
         }), status_code
     except Exception as e:
+        error_msg = str(e).split('\n')[0][:200]
         return jsonify({
             'success': False,
-            'message': f'Error during clock-out: {str(e)}',
+            'title': '❌ Clock-Out Failed',
+            'body': f'Unexpected error: {error_msg}',
+            'notification': f'❌ Clock-Out Failed\nUnexpected error: {error_msg}',
+            'detail': str(e),
             'timestamp': datetime.now().isoformat()
         }), 500
 
