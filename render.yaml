@@ -15,4 +15,6 @@ services:
         value: /usr/local/bin/chromedriver
       - key: PORT
         value: 10000
+      - key: FAKE_CAMERA_VIDEO
+        value: /app/assets/fake_camera.y4m
     healthCheckPath: /health

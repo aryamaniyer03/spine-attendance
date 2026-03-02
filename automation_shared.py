@@ -174,8 +174,15 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
     # Fake camera and media permissions
     chrome_options.add_argument("--use-fake-ui-for-media-stream")
     chrome_options.add_argument("--use-fake-device-for-media-stream")
-    chrome_options.add_argument("--use-fake-device-for-media-stream=black")
-    chrome_options.add_argument("--use-fake-device-for-media-stream=black=1280x720")
+
+    # Use a custom video file for the fake camera if provided
+    # This should be a .y4m or .mjpeg file (e.g., a face photo converted to video)
+    fake_video_path = os.getenv("FAKE_CAMERA_VIDEO")
+    if fake_video_path and os.path.exists(fake_video_path):
+        chrome_options.add_argument(f"--use-file-for-fake-video-capture={fake_video_path}")
+        print(f"Using custom fake camera video: {fake_video_path}")
+    else:
+        print("WARNING: No FAKE_CAMERA_VIDEO set. Using Chrome's default test pattern.")
 
     # Allow location (will set custom coordinates) and other permissions
     prefs = {
@@ -236,9 +243,16 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
         raise
 
 
-def login(driver: webdriver.Chrome, wait: WebDriverWait, progress_callback=None) -> None:
-    # Set custom geolocation to user's location
-    # Latitude: 23.034049, Longitude: 72.504524, Accuracy: 100
+def set_geolocation(driver: webdriver.Chrome) -> None:
+    """Set spoofed geolocation via CDP. Call this before any page that needs location."""
+    try:
+        # Grant geolocation permission explicitly
+        driver.execute_cdp_cmd("Browser.grantPermissions", {
+            "permissions": ["geolocation"],
+        })
+    except Exception:
+        pass  # May not be supported in all Chrome versions
+
     try:
         driver.execute_cdp_cmd("Emulation.setGeolocationOverride", {
             "latitude": 23.034049,
@@ -248,6 +262,10 @@ def login(driver: webdriver.Chrome, wait: WebDriverWait, progress_callback=None)
         print("Geolocation set successfully.")
     except Exception as e:
         print(f"Warning: Could not set geolocation via CDP: {e}")
+
+
+def login(driver: webdriver.Chrome, wait: WebDriverWait, progress_callback=None) -> None:
+    set_geolocation(driver)
 
     print(f"Navigating to login page: {URL}")
     try:
@@ -506,6 +524,7 @@ __all__ = [
     "PASSWORD",
     "should_use_headless",
     "setup_driver",
+    "set_geolocation",
     "login",
     "go_to_attendance",
     "go_to_swipe_form",

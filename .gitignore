@@ -11,3 +11,7 @@ build/
 *.log
 chromedriver.exe
 ngrok.exe
+screenshots/
+.env
+node_modules/
+loading-animation/out/

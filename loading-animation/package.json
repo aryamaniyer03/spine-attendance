@@ -1,0 +1,13 @@
+{
+  "name": "loading-animation",
+  "private": true,
+  "scripts": {
+    "render": "npx remotion render src/index.ts LoadingSpinner out/loading.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.277",
+    "react": "^19",
+    "react-dom": "^19",
+    "remotion": "4.0.277"
+  }
+}
