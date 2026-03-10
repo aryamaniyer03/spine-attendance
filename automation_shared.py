@@ -178,9 +178,15 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
     # Use a custom video file for the fake camera if provided
     # This should be a .y4m or .mjpeg file (e.g., a face photo converted to video)
     fake_video_path = os.getenv("FAKE_CAMERA_VIDEO")
-    if fake_video_path and os.path.exists(fake_video_path):
-        chrome_options.add_argument(f"--use-file-for-fake-video-capture={fake_video_path}")
-        print(f"Using custom fake camera video: {fake_video_path}")
+    if fake_video_path:
+        # Resolve relative paths against the project directory
+        if not os.path.isabs(fake_video_path):
+            fake_video_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), fake_video_path)
+        if os.path.exists(fake_video_path):
+            chrome_options.add_argument(f"--use-file-for-fake-video-capture={fake_video_path}")
+            print(f"Using custom fake camera video: {fake_video_path}")
+        else:
+            print(f"WARNING: FAKE_CAMERA_VIDEO file not found at: {fake_video_path}")
     else:
         print("WARNING: No FAKE_CAMERA_VIDEO set. Using Chrome's default test pattern.")
 

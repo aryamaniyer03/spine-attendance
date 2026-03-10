@@ -72,7 +72,7 @@ def _handle_alert(driver, log):
         alert.accept()
         log("Alert accepted.")
         return alert_text
-    except NoAlertPresentException:
+    except (NoAlertPresentException, Exception):
         return None
 
 
