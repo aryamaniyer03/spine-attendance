@@ -227,7 +227,9 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
     chrome_options.add_argument("--disable-backgrounding-occluded-windows")
 
     if use_headless:
-        chrome_options.add_argument("--headless=new")
+        # Use old --headless mode (not --headless=new) as it has better
+        # support for --use-fake-device-for-media-stream / fake camera
+        chrome_options.add_argument("--headless")
         chrome_options.add_argument("--window-size=1920,1080")
     else:
         chrome_options.add_argument("--start-maximized")
@@ -247,8 +249,51 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
             print("CHROMEDRIVER_PATH not set. Relying on Selenium Manager to find the driver.")
         service = ChromeService()
 
+    def _init_driver(svc):
+        driver = webdriver.Chrome(service=svc, options=chrome_options)
+        # Inject fake camera via CDP — overrides getUserMedia so the HR portal
+        # sees a working camera stream even in headless mode on any OS.
+        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": """
+                (function() {
+                    const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+                    navigator.mediaDevices.getUserMedia = async function(constraints) {
+                        if (constraints && constraints.video) {
+                            try {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = 640;
+                                canvas.height = 480;
+                                const ctx = canvas.getContext('2d');
+                                // Draw a dark frame with a loading circle
+                                ctx.fillStyle = '#000000';
+                                ctx.fillRect(0, 0, 640, 480);
+                                ctx.strokeStyle = '#444444';
+                                ctx.lineWidth = 8;
+                                ctx.beginPath();
+                                ctx.arc(320, 240, 45, 0, Math.PI * 2);
+                                ctx.stroke();
+                                ctx.strokeStyle = '#ffffff';
+                                ctx.lineWidth = 8;
+                                ctx.lineCap = 'round';
+                                ctx.beginPath();
+                                ctx.arc(320, 240, 45, -Math.PI / 2, Math.PI / 4);
+                                ctx.stroke();
+                                const stream = canvas.captureStream(15);
+                                return stream;
+                            } catch(e) {
+                                return originalGetUserMedia(constraints);
+                            }
+                        }
+                        return originalGetUserMedia(constraints);
+                    };
+                })();
+            """
+        })
+        print("Fake camera injected via CDP.")
+        return driver
+
     try:
-        return webdriver.Chrome(service=service, options=chrome_options)
+        return _init_driver(service)
     except SessionNotCreatedException as exc:
         if "version" in str(exc).lower() and CHROMEDRIVER_PATH and os.path.exists(CHROMEDRIVER_PATH):
             print("ChromeDriver version mismatch detected. Attempting to auto-update...")
@@ -256,7 +301,7 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
             if chrome_version and download_chromedriver(chrome_version, download_path=CHROMEDRIVER_PATH):
                 print("ChromeDriver updated successfully. Retrying...")
                 service = ChromeService(executable_path=CHROMEDRIVER_PATH)
-                return webdriver.Chrome(service=service, options=chrome_options)
+                return _init_driver(service)
         raise
 
 
