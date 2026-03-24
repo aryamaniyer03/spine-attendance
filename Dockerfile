@@ -28,14 +28,18 @@ RUN wget -q -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com
     && rm /tmp/google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
-# Install ChromeDriver
-RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d '.' -f 1) \
-    && CHROMEDRIVER_VERSION=$(curl -sS "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_${CHROME_VERSION}") \
+# Install matching ChromeDriver (must match Chrome version exactly)
+RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}') \
+    && CHROME_MAJOR=$(echo $CHROME_VERSION | cut -d '.' -f 1) \
+    && echo "Chrome version: $CHROME_VERSION (major: $CHROME_MAJOR)" \
+    && CHROMEDRIVER_VERSION=$(curl -sS "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_${CHROME_MAJOR}") \
+    && echo "ChromeDriver version: $CHROMEDRIVER_VERSION" \
     && wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip" \
     && unzip chromedriver-linux64.zip \
     && mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
     && chmod +x /usr/local/bin/chromedriver \
-    && rm -rf chromedriver-linux64.zip chromedriver-linux64
+    && rm -rf chromedriver-linux64.zip chromedriver-linux64 \
+    && echo "Installed ChromeDriver: $(chromedriver --version)"
 
 # Set working directory
 WORKDIR /app
@@ -54,5 +58,5 @@ ENV DISPLAY=:99
 # Expose port (Render uses PORT env var)
 EXPOSE 10000
 
-# Start Xvfb and run the Flask app
-CMD Xvfb :99 -screen 0 1920x1080x24 & python app.py
+# Start Xvfb with minimal memory footprint and run the Flask app
+CMD Xvfb :99 -screen 0 1280x720x16 -ac +extension GLX +render -noreset & python app.py

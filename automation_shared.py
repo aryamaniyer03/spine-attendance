@@ -210,13 +210,24 @@ def setup_driver(headless_preference: Optional[bool] = None) -> webdriver.Chrome
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option("useAutomationExtension", False)
 
-    # Minimal essential arguments for cloud environments
-    # Using only the bare minimum to avoid conflicts and crashes
+    # Essential arguments for cloud environments (especially low-memory like Render free tier)
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-background-networking")
+    chrome_options.add_argument("--disable-default-apps")
+    chrome_options.add_argument("--disable-sync")
+    chrome_options.add_argument("--disable-translate")
+    chrome_options.add_argument("--single-process")
+    chrome_options.add_argument("--no-zygote")
+    chrome_options.add_argument("--no-first-run")
+    chrome_options.add_argument("--disable-software-rasterizer")
+    chrome_options.add_argument("--disable-renderer-backgrounding")
+    chrome_options.add_argument("--disable-backgrounding-occluded-windows")
 
     if use_headless:
-        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--window-size=1920,1080")
     else:
         chrome_options.add_argument("--start-maximized")

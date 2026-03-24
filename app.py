@@ -77,59 +77,69 @@ def health():
     """Health check for Render"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
+def _run_with_retry(action_fn, action_name):
+    """Run a clock action with one retry on crash."""
+    last_error = None
+    for attempt in range(2):
+        try:
+            result = action_fn(headless=True)
+            if result.get('success'):
+                title, body, success = _format_notification(action_name, result)
+                return jsonify({
+                    'success': success,
+                    'title': title,
+                    'body': body,
+                    'notification': f"{title}\n{body}",
+                    'detail': result.get('message', ''),
+                    'screenshot': result.get('screenshot'),
+                    'attempt': attempt + 1,
+                    'timestamp': datetime.now().isoformat()
+                }), 200
+
+            # Not successful but no crash — return the error
+            title, body, success = _format_notification(action_name, result)
+            return jsonify({
+                'success': success,
+                'title': title,
+                'body': body,
+                'notification': f"{title}\n{body}",
+                'detail': result.get('message', ''),
+                'screenshot': result.get('screenshot'),
+                'attempt': attempt + 1,
+                'timestamp': datetime.now().isoformat()
+            }), 422
+
+        except Exception as e:
+            last_error = e
+            error_first_line = str(e).split('\n')[0][:200]
+            print(f"[{action_name}] Attempt {attempt + 1} crashed: {error_first_line}")
+            if attempt == 0:
+                print(f"[{action_name}] Retrying...")
+                import gc; gc.collect()  # Free memory before retry
+                continue
+
+    # Both attempts failed
+    error_msg = str(last_error).split('\n')[0][:200]
+    return jsonify({
+        'success': False,
+        'title': f'❌ {action_name} Failed',
+        'body': f'Chrome crashed on both attempts: {error_msg}',
+        'notification': f'❌ {action_name} Failed\nChrome crashed on both attempts: {error_msg}',
+        'detail': str(last_error),
+        'attempt': 2,
+        'timestamp': datetime.now().isoformat()
+    }), 500
+
+
 @app.route('/clock-in')
 def trigger_clock_in():
     """Trigger clock-in automation"""
-    try:
-        result = clock_in(headless=True)
-        title, body, success = _format_notification("Clock-In", result)
-        status_code = 200 if success else 422
-        return jsonify({
-            'success': success,
-            'title': title,
-            'body': body,
-            'notification': f"{title}\n{body}",
-            'detail': result.get('message', ''),
-            'screenshot': result.get('screenshot'),
-            'timestamp': datetime.now().isoformat()
-        }), status_code
-    except Exception as e:
-        error_msg = str(e).split('\n')[0][:200]  # First line, max 200 chars
-        return jsonify({
-            'success': False,
-            'title': '❌ Clock-In Failed',
-            'body': f'Unexpected error: {error_msg}',
-            'notification': f'❌ Clock-In Failed\nUnexpected error: {error_msg}',
-            'detail': str(e),
-            'timestamp': datetime.now().isoformat()
-        }), 500
+    return _run_with_retry(clock_in, "Clock-In")
 
 @app.route('/clock-out')
 def trigger_clock_out():
     """Trigger clock-out automation"""
-    try:
-        result = clock_out(headless=True)
-        title, body, success = _format_notification("Clock-Out", result)
-        status_code = 200 if success else 422
-        return jsonify({
-            'success': success,
-            'title': title,
-            'body': body,
-            'notification': f"{title}\n{body}",
-            'detail': result.get('message', ''),
-            'screenshot': result.get('screenshot'),
-            'timestamp': datetime.now().isoformat()
-        }), status_code
-    except Exception as e:
-        error_msg = str(e).split('\n')[0][:200]
-        return jsonify({
-            'success': False,
-            'title': '❌ Clock-Out Failed',
-            'body': f'Unexpected error: {error_msg}',
-            'notification': f'❌ Clock-Out Failed\nUnexpected error: {error_msg}',
-            'detail': str(e),
-            'timestamp': datetime.now().isoformat()
-        }), 500
+    return _run_with_retry(clock_out, "Clock-Out")
 
 @app.route('/screenshots')
 def list_screenshots():
